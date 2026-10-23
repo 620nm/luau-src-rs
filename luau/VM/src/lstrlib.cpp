@@ -5,10 +5,15 @@
 #include "lstring.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <string.h>
 #include <stdio.h>
 
+// included after <ctype.h>: C++ headers included earlier would disable glibc's inline ctype functions
+#include "lnumutils.h"
+
 LUAU_DYNAMIC_FASTFLAGVARIABLE(LuauOptimizeStringSplit, false)
+LUAU_DYNAMIC_FASTFLAGVARIABLE(LuauOptimizeStringGsub, false)
 
 // macro to `unsign' a character
 #define uchar(c) ((unsigned char)(c))
@@ -19,6 +24,12 @@ static int str_len(lua_State* L)
     luaL_checklstring(L, 1, &l);
     lua_pushinteger(L, (int)l);
     return 1;
+}
+
+// out-of-range values (including NaN and inf) convert to LLONG_MIN, which matches x86-64 conversion behavior
+static long long numtoint64(double n)
+{
+    return luai_numfitsint64(n) ? (long long)n : LLONG_MIN;
 }
 
 static int posrelat(int pos, size_t len)
@@ -830,6 +841,61 @@ static void add_value(MatchState* ms, luaL_Strbuf* b, const char* s, const char*
     luaL_addvalue(b); // add result to accumulator
 }
 
+// checks if a pattern only matches its own text
+// ')' is not in SPECIALS, but it is still an error in a pattern, so it has to take the regular path
+// ']' is intentionally left out: it is only special inside a set, and a set always starts with '[' which is in SPECIALS
+static bool isliteralpattern(const char* p, size_t lp)
+{
+    // lookup table built from SPECIALS and ')', so that each character is checked without a strchr call
+    struct SpecialChars
+    {
+        bool chars[256] = {};
+
+        SpecialChars()
+        {
+            for (const char* c = SPECIALS ")"; *c; c++)
+                chars[uchar(*c)] = true;
+        }
+    };
+
+    static const SpecialChars specials;
+
+    for (size_t i = 0; i < lp; i++)
+    {
+        if (specials.chars[uchar(p[i])])
+            return false;
+    }
+
+    return true;
+}
+
+// finds the first occurrence of a non-empty literal in [s, end)
+static const char* findliteral(const char* s, const char* end, const char* p, size_t lp)
+{
+    if (size_t(end - s) < lp)
+        return NULL;
+
+    const char* last = end - lp;
+
+    if (lp == 1)
+    {
+        // matches that immediately follow each other don't need a memchr call
+        if (*s == p[0])
+            return s;
+
+        return (const char*)memchr(s, p[0], last - s + 1);
+    }
+
+    // the first and the last characters are checked inline to avoid a memcmp call at most positions
+    for (; s <= last; s++)
+    {
+        if (s[0] == p[0] && s[lp - 1] == p[lp - 1] && memcmp(s, p, lp) == 0)
+            return s;
+    }
+
+    return NULL;
+}
+
 static int str_gsub(lua_State* L)
 {
     size_t srcl, lp;
@@ -849,24 +915,67 @@ static int str_gsub(lua_State* L)
         lp--; // skip anchor character
     }
     prepstate(&ms, L, src, srcl, p, lp);
-    while (n < max_s)
+
+    // a non-empty pattern without special characters can only match its own text, so we can search for it directly
+    if (DFFlag::LuauOptimizeStringGsub && !anchor && lp > 0 && isliteralpattern(p, lp))
     {
-        const char* e;
-        reprepstate(&ms);
-        e = match(&ms, src, p);
-        if (e)
+        // replacement strings without escapes can be appended as is; this is determined on the first match
+        int plainrepl = -1;
+        const char* repl = NULL;
+        size_t repll = 0;
+
+        while (n < max_s)
         {
+            const char* e = findliteral(src, ms.src_end, p, lp);
+            if (!e)
+                break;
+
             n++;
-            add_value(&ms, &b, src, e, tr);
+
+            if (e != src)
+                luaL_addlstring(&b, src, e - src);
+
+            if (plainrepl < 0)
+            {
+                repl = (tr == LUA_TSTRING || tr == LUA_TNUMBER) ? lua_tolstring(L, 3, &repll) : NULL;
+                plainrepl = repl && !memchr(repl, L_ESC, repll);
+            }
+
+            if (plainrepl)
+            {
+                if (repll != 0)
+                    luaL_addlstring(&b, repl, repll);
+            }
+            else
+            {
+                reprepstate(&ms);
+                add_value(&ms, &b, e, e + lp, tr);
+            }
+
+            src = e + lp;
         }
-        if (e && e > src) // non empty match?
-            src = e;      // skip it
-        else if (src < ms.src_end)
-            luaL_addchar(&b, *src++);
-        else
-            break;
-        if (anchor)
-            break;
+    }
+    else
+    {
+        while (n < max_s)
+        {
+            const char* e;
+            reprepstate(&ms);
+            e = match(&ms, src, p);
+            if (e)
+            {
+                n++;
+                add_value(&ms, &b, src, e, tr);
+            }
+            if (e && e > src) // non empty match?
+                src = e;      // skip it
+            else if (src < ms.src_end)
+                luaL_addchar(&b, *src++);
+            else
+                break;
+            if (anchor)
+                break;
+        }
     }
     luaL_addlstring(&b, src, ms.src_end - src);
     luaL_pushresult(&b);
@@ -1001,14 +1110,16 @@ static int str_format(lua_State* L)
             {
             case 'c':
             {
-                int count = snprintf(buff, sizeof(buff), form, (int)luaL_checknumber(L, arg));
+                double number = luaL_checknumber(L, arg);
+                // out-of-range values (including NaN and inf) convert to INT_MIN, which matches x86-64 conversion behavior
+                int count = snprintf(buff, sizeof(buff), form, luai_numfitsint(number) ? (int)number : INT_MIN);
                 luaL_addlstring(&b, buff, count);
                 continue; // skip the 'luaL_addlstring' at the end
             }
             case 'd':
             case 'i':
             {
-                long long value = lua_isinteger64(L, arg) ? luaL_checkinteger64(L, arg) : (int64_t)luaL_checknumber(L, arg);
+                long long value = lua_isinteger64(L, arg) ? luaL_checkinteger64(L, arg) : numtoint64(luaL_checknumber(L, arg));
                 addInt64Format(form, formatIndicator, formatItemSize);
                 snprintf(buff, sizeof(buff), form, value);
                 break;
@@ -1026,7 +1137,12 @@ static int str_format(lua_State* L)
                 else
                 {
                     double argValue = luaL_checknumber(L, arg);
-                    v = (argValue < 0) ? (unsigned long long)(long long)argValue : (unsigned long long)argValue;
+                    if (argValue < 0)
+                        v = (unsigned long long)numtoint64(argValue);
+                    else if (argValue < 18446744073709551616.0)
+                        v = (unsigned long long)argValue;
+                    else
+                        v = (unsigned long long)LLONG_MIN; // NaN and values >= 2^64, matching x86-64 conversion behavior
                 }
                 addInt64Format(form, formatIndicator, formatItemSize);
                 snprintf(buff, sizeof(buff), form, v);
@@ -1505,7 +1621,7 @@ static int str_pack(lua_State* L)
         {
         case Kint:
         { // signed integers
-            long long n = (long long)luaL_checknumber(L, arg);
+            long long n = numtoint64(luaL_checknumber(L, arg));
             if (size < SZINT)
             { // need overflow check?
                 long long lim = (long long)1 << ((size * NB) - 1);
@@ -1516,7 +1632,7 @@ static int str_pack(lua_State* L)
         }
         case Kuint:
         { // unsigned integers
-            long long n = (long long)luaL_checknumber(L, arg);
+            long long n = numtoint64(luaL_checknumber(L, arg));
             if (size < SZINT) // need overflow check?
                 luaL_argcheck(L, (unsigned long long)n < ((unsigned long long)1 << (size * NB)), arg, "unsigned overflow");
             packint(&b, (unsigned long long)n, h.islittle, size, 0);

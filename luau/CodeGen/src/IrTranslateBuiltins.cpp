@@ -622,8 +622,14 @@ static BuiltinImplResult translateBuiltinBit32Extract(IrBuilder& build, int npar
     if (nparams < 2 || nresults > 1)
         return {BuiltinImplType::None, -1};
 
-    if (nparams == 2 && args.kind == IrOpKind::Constant && unsigned(int(build.function.doubleOp(args))) >= 32)
-        return {BuiltinImplType::None, -1};
+    if (nparams == 2 && args.kind == IrOpKind::Constant)
+    {
+        double fd = build.function.doubleOp(args);
+
+        // To avoid undefined behavior of casting a value not representable in the target type, check the range first
+        if (!(fd >= INT_MIN && fd <= INT_MAX) || unsigned(int(fd)) >= 32)
+            return {BuiltinImplType::None, -1};
+    }
 
     builtinCheckDouble(build, build.vmReg(arg), pcpos);
     builtinCheckDouble(build, args, pcpos);
@@ -668,14 +674,16 @@ static BuiltinImplResult translateBuiltinBit32Extract(IrBuilder& build, int npar
         IrOp vc = builtinLoadDouble(build, arg3);
 
         IrOp w = build.inst(IrCmd::NUM_TO_INT, vc);
+        IrOp w1 = build.inst(IrCmd::SUB_INT, w, build.constInt(1));
         IrOp fw = build.inst(IrCmd::ADD_INT, f, w);
 
         // f >= 0 && w > 0 && f + w <= 32
-        build.inst(IrCmd::CHECK_CMP_INT, f, build.constInt(0), build.cond(IrCondition::GreaterEqual), build.vmExit(pcpos));
-        build.inst(IrCmd::CHECK_CMP_INT, w, build.constInt(0), build.cond(IrCondition::Greater), build.vmExit(pcpos));
+        // f and w are limited to [0, 32) and [1, 32] first so that f + w can't wrap around
+        build.inst(IrCmd::CHECK_CMP_INT, f, build.constInt(32), build.cond(IrCondition::UnsignedLess), build.vmExit(pcpos));
+        build.inst(IrCmd::CHECK_CMP_INT, w1, build.constInt(32), build.cond(IrCondition::UnsignedLess), build.vmExit(pcpos));
         build.inst(IrCmd::CHECK_CMP_INT, fw, build.constInt(32), build.cond(IrCondition::LessEqual), build.vmExit(pcpos));
 
-        IrOp shift = build.inst(IrCmd::BITLSHIFT_UINT, build.constInt(0xfffffffe), build.inst(IrCmd::SUB_INT, w, build.constInt(1)));
+        IrOp shift = build.inst(IrCmd::BITLSHIFT_UINT, build.constInt(0xfffffffe), w1);
         IrOp m = build.inst(IrCmd::BITNOT_UINT, shift);
 
         IrOp nf = build.inst(IrCmd::BITRSHIFT_UINT, n, f);
@@ -786,14 +794,16 @@ static BuiltinImplResult translateBuiltinBit32Replace(IrBuilder& build, int npar
         IrOp vd = builtinLoadDouble(build, build.vmReg(vmRegOp(args) + 2));
 
         IrOp w = build.inst(IrCmd::NUM_TO_INT, vd);
+        IrOp w1 = build.inst(IrCmd::SUB_INT, w, build.constInt(1));
         IrOp fw = build.inst(IrCmd::ADD_INT, f, w);
 
         // f >= 0 && w > 0 && f + w <= 32
-        build.inst(IrCmd::CHECK_CMP_INT, f, build.constInt(0), build.cond(IrCondition::GreaterEqual), build.vmExit(pcpos));
-        build.inst(IrCmd::CHECK_CMP_INT, w, build.constInt(0), build.cond(IrCondition::Greater), build.vmExit(pcpos));
+        // f and w are limited to [0, 32) and [1, 32] first so that f + w can't wrap around
+        build.inst(IrCmd::CHECK_CMP_INT, f, build.constInt(32), build.cond(IrCondition::UnsignedLess), build.vmExit(pcpos));
+        build.inst(IrCmd::CHECK_CMP_INT, w1, build.constInt(32), build.cond(IrCondition::UnsignedLess), build.vmExit(pcpos));
         build.inst(IrCmd::CHECK_CMP_INT, fw, build.constInt(32), build.cond(IrCondition::LessEqual), build.vmExit(pcpos));
 
-        IrOp shift1 = build.inst(IrCmd::BITLSHIFT_UINT, build.constInt(0xfffffffe), build.inst(IrCmd::SUB_INT, w, build.constInt(1)));
+        IrOp shift1 = build.inst(IrCmd::BITLSHIFT_UINT, build.constInt(0xfffffffe), w1);
         IrOp m = build.inst(IrCmd::BITNOT_UINT, shift1);
 
         IrOp shift2 = build.inst(IrCmd::BITLSHIFT_UINT, m, f);

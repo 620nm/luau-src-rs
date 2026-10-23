@@ -213,7 +213,7 @@ static int luauF_frexp(lua_State* L, StkId res, TValue* arg0, int nresults, StkI
 
 static int luauF_ldexp(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
-    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args))
+    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         double a1 = nvalue(arg0);
         double a2 = nvalue(args);
@@ -429,7 +429,7 @@ static int luauF_tan(lua_State* L, StkId res, TValue* arg0, int nresults, StkId 
 
 static int luauF_arshift(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
-    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args))
+    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         double a1 = nvalue(arg0);
         double a2 = nvalue(args);
@@ -601,7 +601,7 @@ static int luauF_btest(lua_State* L, StkId res, TValue* arg0, int nresults, StkI
 
 static int luauF_extract(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
-    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args))
+    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         double a1 = nvalue(arg0);
         double a2 = nvalue(args);
@@ -621,12 +621,12 @@ static int luauF_extract(lua_State* L, StkId res, TValue* arg0, int nresults, St
                 return 1;
             }
         }
-        else if (ttisnumber(args + 1))
+        else if (ttisnumber(args + 1) && luai_numfitsint(nvalue(args + 1)))
         {
             double a3 = nvalue(args + 1);
             int w = int(a3);
 
-            if (f >= 0 && w > 0 && f + w <= 32)
+            if (f >= 0 && w > 0 && w <= 32 - f)
             {
                 uint32_t m = ~(0xfffffffeu << (w - 1));
                 uint32_t r = (n >> f) & m;
@@ -642,7 +642,7 @@ static int luauF_extract(lua_State* L, StkId res, TValue* arg0, int nresults, St
 
 static int luauF_lrotate(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
-    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args))
+    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         double a1 = nvalue(arg0);
         double a2 = nvalue(args);
@@ -655,7 +655,7 @@ static int luauF_lrotate(lua_State* L, StkId res, TValue* arg0, int nresults, St
 #ifdef _MSC_VER
         uint32_t r = _rotl(u, s);
 #else
-        uint32_t r = (u << (s & 31)) | (u >> ((32 - s) & 31));
+        uint32_t r = (u << (s & 31)) | (u >> ((32u - unsigned(s)) & 31));
 #endif
 
         setnvalue(res, double(r));
@@ -667,7 +667,7 @@ static int luauF_lrotate(lua_State* L, StkId res, TValue* arg0, int nresults, St
 
 static int luauF_lshift(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
-    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args))
+    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         double a1 = nvalue(arg0);
         double a2 = nvalue(args);
@@ -692,7 +692,7 @@ static int luauF_lshift(lua_State* L, StkId res, TValue* arg0, int nresults, Stk
 
 static int luauF_replace(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
-    if (nparams >= 3 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args) && ttisnumber(args + 1))
+    if (nparams >= 3 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args) && ttisnumber(args + 1) && luai_numfitsint(nvalue(args + 1)))
     {
         double a1 = nvalue(arg0);
         double a2 = nvalue(args);
@@ -714,12 +714,12 @@ static int luauF_replace(lua_State* L, StkId res, TValue* arg0, int nresults, St
                 return 1;
             }
         }
-        else if (ttisnumber(args + 2))
+        else if (ttisnumber(args + 2) && luai_numfitsint(nvalue(args + 2)))
         {
             double a4 = nvalue(args + 2);
             int w = int(a4);
 
-            if (f >= 0 && w > 0 && f + w <= 32)
+            if (f >= 0 && w > 0 && w <= 32 - f)
             {
                 uint32_t m = ~(0xfffffffeu << (w - 1));
                 uint32_t r = (n & ~(m << f)) | ((v & m) << f);
@@ -735,7 +735,7 @@ static int luauF_replace(lua_State* L, StkId res, TValue* arg0, int nresults, St
 
 static int luauF_rrotate(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
-    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args))
+    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         double a1 = nvalue(arg0);
         double a2 = nvalue(args);
@@ -748,7 +748,7 @@ static int luauF_rrotate(lua_State* L, StkId res, TValue* arg0, int nresults, St
 #ifdef _MSC_VER
         uint32_t r = _rotr(u, s);
 #else
-        uint32_t r = (u >> (s & 31)) | (u << ((32 - s) & 31));
+        uint32_t r = (u >> (s & 31)) | (u << ((32u - unsigned(s)) & 31));
 #endif
 
         setnvalue(res, double(r));
@@ -760,7 +760,7 @@ static int luauF_rrotate(lua_State* L, StkId res, TValue* arg0, int nresults, St
 
 static int luauF_rshift(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
-    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args))
+    if (nparams >= 2 && nresults <= 1 && ttisnumber(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         double a1 = nvalue(arg0);
         double a2 = nvalue(args);
@@ -799,11 +799,11 @@ static int luauF_type(lua_State* L, StkId res, TValue* arg0, int nresults, StkId
 
 static int luauF_byte(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
-    if (nparams >= 2 && ttisstring(arg0) && ttisnumber(args))
+    if (nparams >= 2 && ttisstring(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         TString* ts = tsvalue(arg0);
         int i = int(nvalue(args));
-        int j = (nparams >= 3) ? (ttisnumber(args + 1) ? int(nvalue(args + 1)) : 0) : i;
+        int j = (nparams >= 3) ? ((ttisnumber(args + 1) && luai_numfitsint(nvalue(args + 1))) ? int(nvalue(args + 1)) : 0) : i;
 
         if (i >= 1 && j >= i && j <= int(ts->len))
         {
@@ -838,7 +838,7 @@ static int luauF_char(lua_State* L, StkId res, TValue* arg0, int nresults, StkId
 
         if (nparams >= 1)
         {
-            if (!ttisnumber(arg0))
+            if (!ttisnumber(arg0) || !luai_numfitsint(nvalue(arg0)))
                 return -1;
 
             int ch = int(nvalue(arg0));
@@ -851,7 +851,7 @@ static int luauF_char(lua_State* L, StkId res, TValue* arg0, int nresults, StkId
 
         for (int i = 2; i <= nparams; ++i)
         {
-            if (!ttisnumber(args + (i - 2)))
+            if (!ttisnumber(args + (i - 2)) || !luai_numfitsint(nvalue(args + (i - 2))))
                 return -1;
 
             int ch = int(nvalue(args + (i - 2)));
@@ -899,7 +899,8 @@ static int luauF_typeof(lua_State* L, StkId res, TValue* arg0, int nresults, Stk
 
 static int luauF_sub(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
-    if (nparams >= 3 && nresults <= 1 && ttisstring(arg0) && ttisnumber(args) && ttisnumber(args + 1))
+    if (nparams >= 3 && nresults <= 1 && ttisstring(arg0) && ttisnumber(args) && ttisnumber(args + 1) && luai_numfitsint(nvalue(args)) &&
+        luai_numfitsint(nvalue(args + 1)))
     {
         TString* ts = tsvalue(arg0);
         int i = int(nvalue(args));
@@ -1038,7 +1039,7 @@ static int luauF_tunpack(lua_State* L, StkId res, TValue* arg0, int nresults, St
 
         if (nparams == 1)
             n = luaH_getn(t);
-        else if (nparams == 3 && ttisnumber(args) && ttisnumber(args + 1) && nvalue(args) == 1.0)
+        else if (nparams == 3 && ttisnumber(args) && ttisnumber(args + 1) && nvalue(args) == 1.0 && luai_numfitsint(nvalue(args + 1)))
             n = int(nvalue(args + 1));
 
         if (n >= 0 && n <= t->sizearray && cast_int(L->stack_last - res) >= n && n + nparams <= LUAI_MAXCSTACK)
@@ -1140,12 +1141,12 @@ static int luauF_select(lua_State* L, StkId res, TValue* arg0, int nresults, Stk
     {
         int n = cast_int(L->base - L->ci->func) - L->ci->p->numparams - 1;
 
-        if (ttisnumber(arg0))
+        if (ttisnumber(arg0) && luai_numfitsint(nvalue(arg0)))
         {
             int i = int(nvalue(arg0));
 
             // i >= 1 && i <= n
-            if (unsigned(i - 1) < unsigned(n))
+            if (unsigned(i) - 1 < unsigned(n))
             {
                 setobj2s(L, res, L->base - n + (i - 1));
                 return 1;
@@ -1363,7 +1364,7 @@ template<typename T>
 static int luauF_readinteger(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
 #if !defined(LUAU_BIG_ENDIAN)
-    if (nparams >= 2 && nresults <= 1 && ttisbuffer(arg0) && ttisnumber(args))
+    if (nparams >= 2 && nresults <= 1 && ttisbuffer(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         int offset;
         luai_num2int(offset, nvalue(args));
@@ -1384,7 +1385,7 @@ template<typename T>
 static int luauF_writeinteger(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
 #if !defined(LUAU_BIG_ENDIAN)
-    if (nparams >= 3 && nresults <= 0 && ttisbuffer(arg0) && ttisnumber(args) && ttisnumber(args + 1))
+    if (nparams >= 3 && nresults <= 0 && ttisbuffer(arg0) && ttisnumber(args) && ttisnumber(args + 1) && luai_numfitsint(nvalue(args)))
     {
         int offset;
         luai_num2int(offset, nvalue(args));
@@ -1408,7 +1409,7 @@ template<typename T>
 static int luauF_readfp(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
 #if !defined(LUAU_BIG_ENDIAN)
-    if (nparams >= 2 && nresults <= 1 && ttisbuffer(arg0) && ttisnumber(args))
+    if (nparams >= 2 && nresults <= 1 && ttisbuffer(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         int offset;
         luai_num2int(offset, nvalue(args));
@@ -1434,7 +1435,7 @@ template<typename T>
 static int luauF_writefp(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
 #if !defined(LUAU_BIG_ENDIAN)
-    if (nparams >= 3 && nresults <= 0 && ttisbuffer(arg0) && ttisnumber(args) && ttisnumber(args + 1))
+    if (nparams >= 3 && nresults <= 0 && ttisbuffer(arg0) && ttisnumber(args) && ttisnumber(args + 1) && luai_numfitsint(nvalue(args)))
     {
         int offset;
         luai_num2int(offset, nvalue(args));
@@ -2455,7 +2456,7 @@ static int luauF_integercreate(lua_State* L, StkId res, TValue* arg0, int nresul
 static int luauF_bufferreadlong(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
 #if !defined(LUAU_BIG_ENDIAN)
-    if (nparams >= 2 && nresults <= 1 && ttisbuffer(arg0) && ttisnumber(args))
+    if (nparams >= 2 && nresults <= 1 && ttisbuffer(arg0) && ttisnumber(args) && luai_numfitsint(nvalue(args)))
     {
         int offset;
         luai_num2int(offset, nvalue(args));
@@ -2475,7 +2476,7 @@ static int luauF_bufferreadlong(lua_State* L, StkId res, TValue* arg0, int nresu
 static int luauF_bufferwritelong(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
 {
 #if !defined(LUAU_BIG_ENDIAN)
-    if (nparams >= 3 && nresults <= 0 && ttisbuffer(arg0) && ttisnumber(args) && ttisinteger(args + 1))
+    if (nparams >= 3 && nresults <= 0 && ttisbuffer(arg0) && ttisnumber(args) && ttisinteger(args + 1) && luai_numfitsint(nvalue(args)))
     {
         int offset;
         luai_num2int(offset, nvalue(args));
@@ -2564,6 +2565,49 @@ static bool luau_hassse41()
     return (cpuinfo[2] & (1 << 19)) != 0;
 }
 #endif
+
+static int luauF_tablecreate(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
+{
+    if (nparams >= 1 && nresults <= 1 && ttisnumber(arg0) && luai_numfitsint(nvalue(arg0)))
+    {
+        double n = nvalue(arg0);
+        int size;
+        luai_num2int(size, n);
+
+        if (size < 0 || luaC_needsGC(L))
+            return -1;
+
+        LuaTable* t = luaH_new(L, size, 0);
+
+        if (nparams >= 2)
+        {
+            TValue* v = args;
+            for (int i = 0; i < size; ++i)
+                setobj2t(L, &t->array[i], v);
+        }
+
+        sethvalue(L, res, t);
+        return 1;
+    }
+
+    return -1;
+}
+
+static int luauF_tableclear(lua_State* L, StkId res, TValue* arg0, int nresults, StkId args, int nparams)
+{
+    if (nparams >= 1 && nresults <= 0 && ttistable(arg0))
+    {
+        LuaTable* t = hvalue(arg0);
+
+        if (t->readonly)
+            return -1;
+
+        luaH_clear(t);
+        return 0;
+    }
+
+    return -1;
+}
 
 const luau_FastFunction luauF_table[256] = {
     NULL,
@@ -2740,6 +2784,9 @@ const luau_FastFunction luauF_table[256] = {
 
     luauF_bufferreadlong,
     luauF_bufferwritelong,
+
+    luauF_tablecreate,
+    luauF_tableclear,
 
 // When adding builtins, add them above this line; what follows is 64 "dummy" entries with luauF_missing fallback.
 // This is important so that older versions of the runtime that don't support newer builtins automatically fall back via luauF_missing.

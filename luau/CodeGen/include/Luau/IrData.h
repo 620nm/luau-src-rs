@@ -519,15 +519,18 @@ enum class IrCmd : uint8_t
     // A: uint
     UINT_TO_FLOAT,
 
-    // Converts a double number to an integer. 'A' may be any representable integer in a double.
+    // Converts a double number to an integer by truncating it (matches the x64 cvttsd2si instruction and lua_tointegerx).
+    // If 'A' is outside of [-2^31, 2^31) or is NaN, the result is INT_MIN.
     // A: double
     NUM_TO_INT,
 
-    // Converts a double number to a 64 bit integer. 'A' may be any representable integer in a double.
+    // Converts a double number to a 64 bit integer by truncating it (matches the x64 cvttsd2si instruction).
+    // If 'A' is outside of [-2^63, 2^63) or is NaN, the result is INT64_MIN.
     // A: double
     NUM_TO_INT64,
 
-    // Converts a double number to an unsigned integer. For out-of-range values of 'A', the result is arch-specific.
+    // Converts a double number to an unsigned integer by truncating it to a 64-bit integer and keeping the low 32 bits (matches luai_num2unsigned).
+    // If 'A' is outside of (-2^63, 2^63) or is NaN, the result is 0.
     // A: double
     NUM_TO_UINT,
 
@@ -607,6 +610,12 @@ enum class IrCmd : uint8_t
     // A: Rn (where to store the result)
     // B: Rn
     DO_LEN,
+
+    // Construct a class object or a table, if the constructor is a class and shape in the CONSTRUCT feedback slot matches it
+    // A: Rn (where to store the result)
+    // B: Rn (constructor)
+    // C: unsigned int (feedback slot id)
+    CONSTRUCT,
 
     // Lookup a value in TValue of any type using a key of any type
     // A: Rn (where to store the result)
@@ -1212,7 +1221,7 @@ struct IrInst
     IrOps ops;
 
     uint32_t lastUse = 0;
-    uint16_t useCount = 0;
+    uint32_t useCount = 0;
 
     // Location of the result (optional)
     X64::RegisterX64 regX64 = X64::noreg;
@@ -1362,7 +1371,7 @@ struct IrBlock
 {
     IrBlockKind kind;
     uint8_t flags = 0;
-    uint16_t useCount = 0;
+    uint32_t useCount = 0;
 
     // 'start' and 'finish' define an inclusive range of instructions which belong to this block inside the function
     // When block has been constructed, 'finish' always points to the first and only terminating instruction
@@ -1421,10 +1430,11 @@ struct BytecodeTypeInfo
 
 struct ValueRestoreLocation
 {
-    IrOp op;             // Operand representing the location (Rn/Kn)
-    IrValueKind kind;    // The kind of value at the restore location
-    IrCmd conversionCmd; // Type conversion instruction that was used to store the value at the restore location
-    bool lazy;           // This location comes from a DSE hint and is emitted on demand (see StoreLocationHint)
+    IrOp op;                                  // Operand representing the location (Rn/Kn)
+    IrValueKind kind;                         // The kind of value at the restore location
+    IrCmd conversionCmd;                      // Type conversion instruction that was used to store the value at the restore location
+    bool lazy;                                // This location comes from a DSE hint and is emitted on demand (see StoreLocationHint)
+    uint32_t sourceInstIdx = kInvalidInstIdx; // Instruction that is the source of the conversion
 };
 
 struct StoreLocationHint
